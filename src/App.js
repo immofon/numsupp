@@ -1,23 +1,58 @@
 import TextField from '@material-ui/core/TextField'
 import Box from '@material-ui/core/Box'
-import Chip from '@material-ui/core/Chip'
 import CloseIcon from '@material-ui/icons/Close';
-import DeleteForeverOutlinedIcon from '@material-ui/icons/DeleteForeverOutlined';
-import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu,MenuItem } from '@material-ui/core';
+import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu, MenuItem } from '@material-ui/core';
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown'
+import Tex from '@matejmazur/react-katex'
+import math from 'remark-math'
+import 'katex/dist/katex.min.css' // `react-katex` does not import the CSS for you
+
+
 import * as monaco from 'monaco-editor'
-import { EditRounded } from '@material-ui/icons';
 
 const httpprefix = "http://mofon.top:8179"
 
 let log = ""
 let editorCacheCode = ""
-let editorCachePosition = new monaco.Position(1,1)
+let editorCachePosition = new monaco.Position(1, 1)
+
+const testdate = `# 1.矩阵相乘
+
+## 题目描述
+$m$行$n$列的矩阵$A$与$n$行$k$列的矩阵B的乘积$C=AB$为$m$行$k$列的矩阵，且有
+
+$$
+C_{ij}=\\sum_{l=1}^nA_{il}B_{lj}
+$$
+编写矩阵相乘的通用程序，并对于
+$$
+A=
+\\left(
+\\begin{matrix}
+1&3&-2\\\\
+-2&0&5
+\\end{matrix}
+\\right)
+，
+B=
+\\left(
+\\begin{matrix}
+4&3\\\\
+1&-2\\\\
+0&8
+\\end{matrix}
+\\right)
+$$
+利用此通用程序计算乘积矩阵$C=AB$.
+
+
+`
 
 function App() {
   let line_num = 1
   const [codes, setCodes] = useState([])
-  const [expectpointsNum,setExpectpointsNum] = useState(0)
+  const [expectpointsNum, setExpectpointsNum] = useState(0)
 
   const [title, setTitle] = useState("正在加载题目列表")
   const [expectpointsInput, setExpectpointsInput] = useState({})
@@ -31,8 +66,8 @@ function App() {
   const [problemName, setProblemName] = useState("")
   const [problemAnchorEl, setProblemAnchorEl] = useState(null);
 
-  const [editor,setEditor] = useState(null)
-  
+  const [editor, setEditor] = useState(null)
+
 
   useEffect(() => {
     let ed = monaco.editor.create(document.getElementById("editor"), {
@@ -56,7 +91,7 @@ function App() {
   }, [])
 
   const checkCode = (code) => {
-    return code.split("\n").every(v=>v.startsWith("/") || v === "")
+    return code.split("\n").every(v => v.startsWith("/") || v === "")
     //return true
   }
 
@@ -68,24 +103,24 @@ function App() {
     }
 
     editor && editor.setValue(code)
-  },[editor])
+  }, [editor])
 
 
   useEffect(() => {
     printload_start("题目列表")
-    
+
     printload_start("问题:" + problemName)
     fetch(`${httpprefix}/problems`, {
       method: "GET",
       mode: 'cors',
     }).then(response => response.json()).then(json => {
-      
+
       json = json.map(v => ({
-        name:v,
+        name: v,
       }))
       setProblems(json)
       setTitle("请选择题目")
-      
+
       printload_done("题目列表")
     }).catch(err => {
       print("访问服务器失败")
@@ -93,7 +128,7 @@ function App() {
       print("--------", false)
     })
   }, [])
-  
+
   useEffect(() => {
     if (problemName === "") {
       return
@@ -114,7 +149,7 @@ function App() {
       setRunning(false)
       print("--------", false)
     })
-  },[problemName])
+  }, [problemName])
 
   const scrollConsoleToBottom = () => {
     setTimeout(() => consoleEndRef || consoleEndRef.current.scrollIntoView({ behavior: "smooth" }), 5)
@@ -145,17 +180,19 @@ function App() {
     update()
   }
 
+
+
   const printbr = () => print("--------", false)
 
   const printload_start = (msg) => {
-    print("[正在加载] "+msg)
+    print("[正在加载] " + msg)
   }
   const printload_done = (msg) => {
-    print("[加载成功] "+msg)
+    print("[加载成功] " + msg)
   }
 
   const run = () => {
-    setShowConsole(true)
+    setShowConsole(true); print(testdate)
 
     let ok = true
     for (let i = 1; i <= expectpointsNum; i++) {
@@ -230,36 +267,46 @@ function App() {
           <Typography noWrap style={{ flexGrow: 1 }}>
             {title}
           </Typography>
-          <Button color="inherit" onClick={e=>setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
+          <Button color="inherit" onClick={e => setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
           <Button color="inherit" onClick={() => setShowConsole(!showConsole)}>控制台</Button>
         </Toolbar>
 
         <Menu
-        id="long-menu"
-        anchorEl={problemAnchorEl}
-        keepMounted
-        open={Boolean(problemAnchorEl)}
-        onClose={()=>setProblemAnchorEl(null)}
-        PaperProps={{
-          style: {
-            maxHeight: "20em",
-            width: '50em',
-          },
-        }}
-      >
-        {problems.map((p) => (
-          <MenuItem key={p.name} selected={p.name === problemName} onClick={() => { setProblemName(p.name); setTitle(p.name); setProblemAnchorEl(null) }}>
-            {p.name}
-          </MenuItem>
-        ))}
-      </Menu>
+          id="long-menu"
+          anchorEl={problemAnchorEl}
+          keepMounted
+          open={Boolean(problemAnchorEl)}
+          onClose={() => setProblemAnchorEl(null)}
+          PaperProps={{
+            style: {
+              maxHeight: "20em",
+              width: '50em',
+            },
+          }}
+        >
+          {problems.map((p) => (
+            <MenuItem key={p.name} selected={p.name === problemName} onClick={() => { setProblemName(p.name); setTitle(p.name); setProblemAnchorEl(null) }}>
+              {p.name}
+            </MenuItem>
+          ))}
+        </Menu>
       </AppBar>
 
 
-      
-      <Box style={{ maxWidth: "50em", margin: "0 auto" }}>
-        <div id="editor" style={{height:"30em"}}></div>
 
+      <Box style={{ maxWidth: "50em", margin: "0 auto" }}>
+        <div id="editor" style={{ height: "30em" }}></div>
+
+        <div class="tex">
+          
+          <ReactMarkdown plugins={[math]}
+            renderers={{
+              inlineMath: ({ value }) => <Tex math={value} />,
+              math: ({ value }) => <Tex block math={value} />
+            }}>
+            {testdate}
+          </ReactMarkdown>
+        </div>
         {
           codes.map(x => {
             switch (x.type) {
