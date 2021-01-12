@@ -3,15 +3,23 @@ import Box from '@material-ui/core/Box'
 import Chip from '@material-ui/core/Chip'
 import CloseIcon from '@material-ui/icons/Close';
 import DeleteForeverOutlinedIcon from '@material-ui/icons/DeleteForeverOutlined';
-import codes from "./data/codes.json"
-import { Button, IconButton, Paper, CircularProgress, Card, CardContent } from '@material-ui/core';
-import { useState, useRef } from 'react';
+import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu,MenuItem } from '@material-ui/core';
+import { useState, useRef, useEffect } from 'react';
+import * as monaco from 'monaco-editor'
+import { EditRounded } from '@material-ui/icons';
 
+const httpprefix = "http://mofon.top:8179"
 
 let log = ""
+let editorCacheCode = ""
+let editorCachePosition = new monaco.Position(1,1)
 
 function App() {
   let line_num = 1
+  const [codes, setCodes] = useState([])
+  const [expectpointsNum,setExpectpointsNum] = useState(0)
+
+  const [title, setTitle] = useState("正在加载题目列表")
   const [expectpointsInput, setExpectpointsInput] = useState({})
   const [running, setRunning] = useState(false)
   const [showConsole, setShowConsole] = useState(true)
@@ -19,8 +27,97 @@ function App() {
   const [selectedCheckpoint, setSelectedCheckpoint] = useState("")
   const consoleEndRef = useRef(null)
 
+  const [problems, setProblems] = useState([])
+  const [problemName, setProblemName] = useState("")
+  const [problemAnchorEl, setProblemAnchorEl] = useState(null);
+
+  const [editor,setEditor] = useState(null)
+  
+
+  useEffect(() => {
+    let ed = monaco.editor.create(document.getElementById("editor"), {
+      value: "",
+      language: "c"
+    });
+    ed.onDidChangeModelContent((e) => {
+      const v = ed.getValue()
+      const p = ed.getPosition()
+      console.log(ed.getPosition())
+      if (checkCode(v) === false) {
+        ed.setValue(editorCacheCode)
+        ed.setPosition(editorCachePosition)
+        print("您只能按照要求更改代码,刚才的输入已被自动撤回")
+      } else {
+        editorCacheCode = v
+        editorCachePosition = p
+      }
+    });
+    setEditor(ed)
+  }, [])
+
+  const checkCode = (code) => {
+    return code.split("\n").every(v=>v.startsWith("/") || v === "")
+    //return true
+  }
+
+  useEffect(() => {
+    const code = "// hello"
+    if (checkCode(code) === false) {
+      alert("该题目有错误")
+      return
+    }
+
+    editor && editor.setValue(code)
+  },[editor])
+
+
+  useEffect(() => {
+    printload_start("题目列表")
+    
+    printload_start("问题:" + problemName)
+    fetch(`${httpprefix}/problems`, {
+      method: "GET",
+      mode: 'cors',
+    }).then(response => response.json()).then(json => {
+      
+      json = json.map(v => ({
+        name:v,
+      }))
+      setProblems(json)
+      setTitle("请选择题目")
+      
+      printload_done("题目列表")
+    }).catch(err => {
+      print("访问服务器失败")
+    }).finally(() => {
+      print("--------", false)
+    })
+  }, [])
+  
+  useEffect(() => {
+    if (problemName === "") {
+      return
+    }
+
+    printload_start("问题:" + problemName)
+    fetch(`${httpprefix}/problem/${problemName}`, {
+      method: "GET",
+      mode: 'cors',
+    }).then(response => response.json()).then(json => {
+      console.log(json)
+      setCodes(json.lines)
+      setExpectpointsNum(json.expectpointsNum)
+      printload_done("问题:" + problemName)
+    }).catch(err => {
+      print("访问服务器失败")
+    }).finally(() => {
+      setRunning(false)
+      print("--------", false)
+    })
+  },[problemName])
+
   const scrollConsoleToBottom = () => {
-    setTimeout(() => consoleEndRef.current.scrollIntoView({ behavior: "smooth" }), 5)
+    setTimeout(() => consoleEndRef || consoleEndRef.current.scrollIntoView({ behavior: "smooth" }), 5)
 
   }
 
@@ -48,8 +145,31 @@ function App() {
     update()
   }
 
+  const printbr = () => print("--------", false)
+
+  const printload_start = (msg) => {
+    print("[正在加载] "+msg)
+  }
+  const printload_done = (msg) => {
+    print("[加载成功] "+msg)
+  }
+
   const run = () => {
     setShowConsole(true)
+
+    let ok = true
+    for (let i = 1; i <= expectpointsNum; i++) {
+      let ep = expectpointsInput[`${i}`]
+      if (typeof (ep) !== "string" || ep === "") {
+        print(`请补全输入[${i}]`)
+        ok = false
+      }
+    }
+    if (!ok) {
+      printbr()
+      return
+    }
+
     console.log(JSON.stringify(expectpointsInput))
     if (running === true) {
       print("服务器已经在运行您的程序,请等待...")
@@ -57,18 +177,17 @@ function App() {
     }
     setRunning(true)
     print("提交代码到服务器,开始运行")
-    fetch("http://localhost:8170/", {
+    fetch(`${httpprefix}/run/${encodeURI(problemName)}`, {
       method: "POST",
       mode: 'cors',
       body: JSON.stringify(expectpointsInput)
     }).then(response => response.json()).then(json => {
-      console.log(json)
       print(json.output)
     }).catch(err => {
       print("访问服务器失败")
     }).finally(() => {
       setRunning(false)
-      print("--------", false)
+      printbr()
     })
   }
 
@@ -88,7 +207,7 @@ function App() {
     }
     setRunning(true)
     print(`提交代码到服务器,开始检查输入[${selectedCheckpoint}]`)
-    fetch("http://localhost:8170/", {
+    fetch(`${httpprefix}/run/${encodeURI(problemName)}`, {
       method: "POST",
       mode: 'cors',
       body: JSON.stringify({ [selectedCheckpoint]: expectpointsInput[selectedCheckpoint] })
@@ -99,28 +218,48 @@ function App() {
       print("访问服务器失败")
     }).finally(() => {
       setRunning(false)
-      print("--------", false)
+      printbr()
     })
   }
 
   return (
     <div>
+      <AppBar position="static" style={{ marginBottom: "3em" }}>
+        <Toolbar>
+
+          <Typography noWrap style={{ flexGrow: 1 }}>
+            {title}
+          </Typography>
+          <Button color="inherit" onClick={e=>setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
+          <Button color="inherit" onClick={() => setShowConsole(!showConsole)}>控制台</Button>
+        </Toolbar>
+
+        <Menu
+        id="long-menu"
+        anchorEl={problemAnchorEl}
+        keepMounted
+        open={Boolean(problemAnchorEl)}
+        onClose={()=>setProblemAnchorEl(null)}
+        PaperProps={{
+          style: {
+            maxHeight: "20em",
+            width: '50em',
+          },
+        }}
+      >
+        {problems.map((p) => (
+          <MenuItem key={p.name} selected={p.name === problemName} onClick={() => { setProblemName(p.name); setTitle(p.name); setProblemAnchorEl(null) }}>
+            {p.name}
+          </MenuItem>
+        ))}
+      </Menu>
+      </AppBar>
 
 
+      
       <Box style={{ maxWidth: "50em", margin: "0 auto" }}>
-        <Box style={{ position: "fixed", left: "3em", bottom: "3em" }}>
+        <div id="editor" style={{height:"30em"}}></div>
 
-        <Button onClick={() => setShowConsole(true)} color="primary" variant="contained" >
-            打开控制台
-        </Button>
-          
-        
-        </Box>
-
-        
-        <Button onClick={() => setShowConsole(true)} color="primary" variant="contained" style={{display:"block",marginTop:"1em"}} >
-          选择题目
-        </Button>
         {
           codes.map(x => {
             switch (x.type) {
@@ -142,6 +281,7 @@ function App() {
                     id={`expectpoint-${x.id}`}
                     label={`输入[${x.id}] ${x.prompt}`}
                     multiline
+                    spellCheck={false}
                     size="small"
                     variant="standard"
                     style={{ width: "100%", marginTop: "0" }}
