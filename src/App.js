@@ -1,7 +1,7 @@
 import TextField from '@material-ui/core/TextField'
 import Box from '@material-ui/core/Box'
 import CloseIcon from '@material-ui/icons/Close';
-import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu, MenuItem } from '@material-ui/core';
+import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu, MenuItem, Grid } from '@material-ui/core';
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown'
 import Tex from '@matejmazur/react-katex'
@@ -10,54 +10,25 @@ import 'katex/dist/katex.min.css' // `react-katex` does not import the CSS for y
 
 
 import * as monaco from 'monaco-editor'
+import { DriveEtaOutlined, EditRounded } from '@material-ui/icons';
 
-const httpprefix = "http://mofon.top:8179"
+const httpprefix = "http://localhost:8179"
 
 let log = ""
 let editorCacheCode = ""
 let editorCachePosition = new monaco.Position(1, 1)
 
-const testdate = `# 1.矩阵相乘
 
-## 题目描述
-$m$行$n$列的矩阵$A$与$n$行$k$列的矩阵B的乘积$C=AB$为$m$行$k$列的矩阵，且有
-
-$$
-C_{ij}=\\sum_{l=1}^nA_{il}B_{lj}
-$$
-编写矩阵相乘的通用程序，并对于
-$$
-A=
-\\left(
-\\begin{matrix}
-1&3&-2\\\\
--2&0&5
-\\end{matrix}
-\\right)
-，
-B=
-\\left(
-\\begin{matrix}
-4&3\\\\
-1&-2\\\\
-0&8
-\\end{matrix}
-\\right)
-$$
-利用此通用程序计算乘积矩阵$C=AB$.
-
-
-`
 
 function App() {
-  let line_num = 1
-  const [codes, setCodes] = useState([])
+  const [markdown, setMarkdown] = useState("")
+  const [splitedCode, setSplitedCode] = useState([])
+
   const [expectpointsNum, setExpectpointsNum] = useState(0)
 
   const [title, setTitle] = useState("正在加载题目列表")
   const [expectpointsInput, setExpectpointsInput] = useState({})
   const [running, setRunning] = useState(false)
-  const [showConsole, setShowConsole] = useState(true)
   const [now, setNow] = useState(0)
   const [selectedCheckpoint, setSelectedCheckpoint] = useState("")
   const consoleEndRef = useRef(null)
@@ -69,41 +40,66 @@ function App() {
   const [editor, setEditor] = useState(null)
 
 
+
+  const getHeight = () => {
+    const appbar = document.getElementById("appbar")
+    return window.innerHeight - appbar.offsetHeight
+  }
+
+  const [height, setHeight] = useState(0)
+
   useEffect(() => {
-    let ed = monaco.editor.create(document.getElementById("editor"), {
-      value: "",
-      language: "c"
-    });
-    ed.onDidChangeModelContent((e) => {
-      const v = ed.getValue()
-      const p = ed.getPosition()
-      console.log(ed.getPosition())
-      if (checkCode(v) === false) {
-        ed.setValue(editorCacheCode)
-        ed.setPosition(editorCachePosition)
-        print("您只能按照要求更改代码,刚才的输入已被自动撤回")
-      } else {
-        editorCacheCode = v
-        editorCachePosition = p
-      }
-    });
-    setEditor(ed)
+    setHeight(getHeight())
+    window.addEventListener("resize", e => {
+      setHeight(getHeight())
+    })
   }, [])
 
-  const checkCode = (code) => {
-    return code.split("\n").every(v => v.startsWith("/") || v === "")
-    //return true
+  const checkCode = () => {
+    const splited = editor.getValue().replace(/\r/mg, "").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/$/m)
+    if (splited.length !== splitedCode.length) {
+      return false
+    }
+    for (let i = 0; i < splited.length; i += 2) {
+      if (splited[i] !== splitedCode[i]) {
+        return false
+      }
+    }
+    return true
   }
 
   useEffect(() => {
-    const code = "// hello"
-    if (checkCode(code) === false) {
-      alert("该题目有错误")
-      return
-    }
+    const imr = setInterval(() => {
+      if (editor && typeof (editor.getValue()) === "string" && splitedCode.length > 0) {
+        const v = editor.getValue()
+        const p = editor.getPosition()
+        if (checkCode() === false) {
+          editor.setValue(editorCacheCode)
+          editor.setPosition(editorCachePosition)
+          print("您只能按照要求更改代码,刚才的操作已被自动撤回")
+        } else {
+          editorCacheCode = v
+          editorCachePosition = p
+        }
+      }
 
-    editor && editor.setValue(code)
-  }, [editor])
+    }, 100)
+    return () => clearInterval(imr)
+  }, [editor, splitedCode])
+
+  useEffect(() => {
+    let ed = monaco.editor.create(document.getElementById("editor"), {
+      value: "",
+      language: "c",
+      automaticLayout: true,
+      minimap: { enabled: false } ,
+    });
+
+    setEditor(ed)
+  }, [])
+
+
+
 
 
   useEffect(() => {
@@ -134,14 +130,23 @@ function App() {
       return
     }
 
+    setSplitedCode([])
+    editorCacheCode = ""
+    editorCachePosition = new monaco.Position(0, 0)
+
     printload_start("问题:" + problemName)
     fetch(`${httpprefix}/problem/${problemName}`, {
       method: "GET",
       mode: 'cors',
     }).then(response => response.json()).then(json => {
       console.log(json)
-      setCodes(json.lines)
-      setExpectpointsNum(json.expectpointsNum)
+      let code = json.code || ""
+      code = code.replace(/\r/mg, "")
+      editor.setValue(code)
+      editorCacheCode = code
+      setSplitedCode(code.split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/$/m))
+      setMarkdown(json.markdown || "")
+      setExpectpointsNum(json.expects || 0)
       printload_done("问题:" + problemName)
     }).catch(err => {
       print("访问服务器失败")
@@ -152,8 +157,7 @@ function App() {
   }, [problemName])
 
   const scrollConsoleToBottom = () => {
-    setTimeout(() => consoleEndRef || consoleEndRef.current.scrollIntoView({ behavior: "smooth" }), 5)
-
+    setTimeout(() => consoleEndRef && consoleEndRef.current.scrollIntoView(false), 10)
   }
 
   const update = () => setNow(Date.now())
@@ -192,8 +196,6 @@ function App() {
   }
 
   const run = () => {
-    setShowConsole(true); print(testdate)
-
     let ok = true
     for (let i = 1; i <= expectpointsNum; i++) {
       let ep = expectpointsInput[`${i}`]
@@ -207,7 +209,6 @@ function App() {
       return
     }
 
-    console.log(JSON.stringify(expectpointsInput))
     if (running === true) {
       print("服务器已经在运行您的程序,请等待...")
       return
@@ -232,12 +233,10 @@ function App() {
     if (selectedCheckpoint === "") {
       return
     }
-    setShowConsole(true)
     if (!expectpointsInput[selectedCheckpoint]) {
       print(`请补全输入[${selectedCheckpoint}]`)
       return
     }
-    console.log(JSON.stringify(expectpointsInput))
     if (running === true) {
       print("服务器已经在运行您的程序,请等待...")
       return
@@ -261,14 +260,16 @@ function App() {
 
   return (
     <div>
-      <AppBar position="static" style={{ marginBottom: "3em" }}>
-        <Toolbar>
 
+      <AppBar id="appbar" position="static" style={{ margin: "0rem" }} elevation={0}>
+        <Toolbar variant="dense">
           <Typography noWrap style={{ flexGrow: 1 }}>
             {title}
           </Typography>
           <Button color="inherit" onClick={e => setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
-          <Button color="inherit" onClick={() => setShowConsole(!showConsole)}>控制台</Button>
+          <Button color="inherit" onClick={() => {
+            print(JSON.stringify(checkCode(), "", "  "))
+          }}>测试</Button>
         </Toolbar>
 
         <Menu
@@ -293,94 +294,91 @@ function App() {
       </AppBar>
 
 
+      <Grid
+        container
+        direction="row"
+        alignItems="stretch"
+        style={{ width: "100%", height: "100%" }}
+      >
+        <Grid item xs={6}>
+          <div style={{ overflowY: "auto", height: height * 0.7, margin: "0" }}>
+            <div style={{ margin: "0.5rem" }}>
+              <ReactMarkdown plugins={[math]}
+                renderers={{
+                  inlineMath: ({ value }) => <Tex math={value} />,
+                  math: ({ value }) => <Tex block math={value} />
+                }}>
+                {markdown}
+              </ReactMarkdown>
+            </div>
+          </div>
 
-      <Box style={{ maxWidth: "50em", margin: "0 auto" }}>
-        <div id="editor" style={{ height: "30em" }}></div>
 
-        <div class="tex">
-          
-          <ReactMarkdown plugins={[math]}
-            renderers={{
-              inlineMath: ({ value }) => <Tex math={value} />,
-              math: ({ value }) => <Tex block math={value} />
+
+          <div style={{ overflowY: "auto", height: height * 0.3, width: "100%", margin: "0", borderTop: "1px solid #bbb" }}>
+            <div style={{ margin: "0.5rem" }}>
+              {
+                log.split("\n").map(v => {
+                  return (<div style={{ fontSize: 12, margin: "0" }}>{v}</div>)
+                })
+              }
+
+
+            </div>
+            <div ref={consoleEndRef}></div>
+          </div>
+
+        </Grid>
+        <Grid item xs={6}>
+          <div id="editor" style={{ height: "100%", overflow: "hidden", borderLeft: "1px solid #bbb" }}></div>
+        </Grid>
+      </Grid>
+
+
+
+
+
+
+
+
+      {/*
+
+      
+        <div>
+          <Paper
+            variant="outlined" square
+            style={{
+              display: (showConsole === true ? "" : "none"),
+              width: "100%",
+              position: "fixed", bottom: "0",
+              zIndex: "100",
             }}>
-            {testdate}
-          </ReactMarkdown>
+            <IconButton
+              onClick={() => setShowConsole(false)}
+              size="small" color="primary" aria-label="close" component="span" style={{ position: "absolute", right: "1em", top: "0" }}>
+              <CloseIcon style={{ fontSize: 19 }} />
+            </IconButton>
+            <div style={{ position: "absolute", left: "1em", top: "0" }}>
+              <Button size="small" color="primary" onClick={() => setShowConsole(false)}>隐藏控制台</Button>
+              <Button size="small" color="primary" onClick={clear}>清空输出</Button>
+              <Button size="small" color="primary" onClick={() => { clear(); run() }}> 清空输出并运行</Button>
+              <Button size="small" color="primary" onClick={run}> 运行</Button>
+
+              <Button size="small" color="primary" onClick={runSelectedCheckpoint} style={{ display: selectedCheckpoint === "" ? "none" : "" }}> 检查输入[{selectedCheckpoint}]</Button>
+            </div>
+
+            <div style={{ margin: "1em", marginTop: "1.5em", height: "15em", overflowX: "auto" }}>
+              {
+                log.split("\n").map(v => {
+                  return (<pre style={{ fontSize: 12, margin: "0" }}>{v}</pre>)
+                })
+              }
+              <div ref={consoleEndRef} />
+            </div>
+          </Paper>
         </div>
-        {
-          codes.map(x => {
-            switch (x.type) {
-              case "code":
-                return (<div key={`code-${x.line}`}>
-                  <span style={{ width: "", paddingRight: "1em", fontSize: 12, color: "gray", fontFamily: "monospace" }}>{line_num++}</span>
-                  <pre style={{ fontFamily: "monospace", margin: 0, display: "inline" }}>{x.code.replace("\t", "  ")}</pre>
-                </div>
-                )
-              case "checkpoint":
-                return (<div key={`checkpoint-${x.line}`}>
-                  <span style={{ width: "", paddingRight: "1em", fontSize: 12, color: "gray", fontFamily: "monospace" }}>{line_num++}</span>
-                  <pre style={{ fontFamily: "monospace", margin: 0, display: "inline" }}>{"\t".replace("\t", "  ")}</pre>
-                  <pre style={{ fontFamily: "monospace", margin: 0, display: "inline", color: "#cb3a56" }}>{`检查点[${x.id}] 检查${x.prompt}`}</pre>
-                </div>)
-              case "expectpoint":
-                return (<div key={`expectpoint-${x.line}`} style={{ marginLeft: "3.5em", marginRight: "3em", fontFamily: "monospace", fontSize: 12 }}>
-                  <TextField
-                    id={`expectpoint-${x.id}`}
-                    label={`输入[${x.id}] ${x.prompt}`}
-                    multiline
-                    spellCheck={false}
-                    size="small"
-                    variant="standard"
-                    style={{ width: "100%", marginTop: "0" }}
-                    onFocus={e => { setSelectedCheckpoint(x.id) }}
-                    onChange={e => {
-                      const value = e.target.value
-                      setExpectpointsInput({ ...expectpointsInput, [`${x.id}`]: value })
-                    }}
-                  />
-                </div>
-
-                )
-            }
-          })
-        }
-      </Box>
-
-      <Box display="block" height="18em"></Box>
-      <div>
-
-        <Paper
-          variant="outlined" square
-          style={{
-            display: (showConsole === true ? "" : "none"),
-            width: "100%",
-            position: "fixed", bottom: "0",
-            zIndex: "100",
-          }}>
-          <IconButton
-            onClick={() => setShowConsole(false)}
-            size="small" color="primary" aria-label="close" component="span" style={{ position: "absolute", right: "1em", top: "0" }}>
-            <CloseIcon style={{ fontSize: 19 }} />
-          </IconButton>
-          <div style={{ position: "absolute", left: "1em", top: "0" }}>
-            <Button size="small" color="primary" onClick={() => setShowConsole(false)}>隐藏控制台</Button>
-            <Button size="small" color="primary" onClick={clear}>清空输出</Button>
-            <Button size="small" color="primary" onClick={() => { clear(); run() }}> 清空输出并运行</Button>
-            <Button size="small" color="primary" onClick={run}> 运行</Button>
-
-            <Button size="small" color="primary" onClick={runSelectedCheckpoint} style={{ display: selectedCheckpoint === "" ? "none" : "" }}> 检查输入[{selectedCheckpoint}]</Button>
-          </div>
-
-          <div style={{ margin: "1em", marginTop: "1.5em", height: "15em", overflowX: "auto" }}>
-            {
-              log.split("\n").map(v => {
-                return (<pre style={{ fontSize: 12, margin: "0" }}>{v}</pre>)
-              })
-            }
-            <div ref={consoleEndRef} />
-          </div>
-        </Paper>
-      </div>
+        
+      */}
 
       <div style={{ display: "none" }}>{now}</div>
     </div>
