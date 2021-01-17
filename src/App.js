@@ -1,18 +1,14 @@
-import TextField from '@material-ui/core/TextField'
-import Box from '@material-ui/core/Box'
-import CloseIcon from '@material-ui/icons/Close';
 import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu, MenuItem, Grid } from '@material-ui/core';
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown'
 import Tex from '@matejmazur/react-katex'
 import math from 'remark-math'
+import gfm from 'remark-gfm'
 import 'katex/dist/katex.min.css' // `react-katex` does not import the CSS for you
 
-
 import * as monaco from 'monaco-editor'
-import { DriveEtaOutlined, EditRounded } from '@material-ui/icons';
 
-const httpprefix = "http://localhost:8179"
+const httpprefix = "http://mofon.top:8179"
 
 let log = ""
 let editorCacheCode = ""
@@ -56,7 +52,7 @@ function App() {
   }, [])
 
   const checkCode = () => {
-    const splited = editor.getValue().replace(/\r/mg, "").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/$/m)
+    const splited = editor.getValue().replace(/\r/mg, "").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/\n/mg)
     if (splited.length !== splitedCode.length) {
       return false
     }
@@ -144,7 +140,7 @@ function App() {
       code = code.replace(/\r/mg, "")
       editor.setValue(code)
       editorCacheCode = code
-      setSplitedCode(code.split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/$/m))
+      setSplitedCode(code.split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/\n/mg))
       setMarkdown(json.markdown || "")
       setExpectpointsNum(json.expects || 0)
       printload_done("问题:" + problemName)
@@ -195,19 +191,19 @@ function App() {
     print("[加载成功] " + msg)
   }
 
+  const getExpectCode = id => { // id: 1,2,...
+    const splited = editor.getValue().replace(/\r/mg,"").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/\n/mg)
+    return splited[id * 2 - 1]
+  }
+
   const run = () => {
-    let ok = true
+
+    let expects = []
     for (let i = 1; i <= expectpointsNum; i++) {
-      let ep = expectpointsInput[`${i}`]
-      if (typeof (ep) !== "string" || ep === "") {
-        print(`请补全输入[${i}]`)
-        ok = false
-      }
+      expects.push(getExpectCode(i).replace(/\r/mg,""))
     }
-    if (!ok) {
-      printbr()
-      return
-    }
+
+    print(JSON.stringify(expects,"","  "))
 
     if (running === true) {
       print("服务器已经在运行您的程序,请等待...")
@@ -218,7 +214,9 @@ function App() {
     fetch(`${httpprefix}/run/${encodeURI(problemName)}`, {
       method: "POST",
       mode: 'cors',
-      body: JSON.stringify(expectpointsInput)
+      body: JSON.stringify({
+        expects:expects,
+      })
     }).then(response => response.json()).then(json => {
       print(json.output)
     }).catch(err => {
@@ -268,8 +266,8 @@ function App() {
           </Typography>
           <Button color="inherit" onClick={e => setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
           <Button color="inherit" onClick={() => {
-            print(JSON.stringify(checkCode(), "", "  "))
-          }}>测试</Button>
+            run()
+          }}>运行</Button>
         </Toolbar>
 
         <Menu
@@ -303,7 +301,7 @@ function App() {
         <Grid item xs={6}>
           <div style={{ overflowY: "auto", height: height * 0.7, margin: "0" }}>
             <div style={{ margin: "0.5rem" }}>
-              <ReactMarkdown plugins={[math]}
+              <ReactMarkdown plugins={[math,gfm]}
                 renderers={{
                   inlineMath: ({ value }) => <Tex math={value} />,
                   math: ({ value }) => <Tex block math={value} />
