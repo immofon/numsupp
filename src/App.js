@@ -197,13 +197,10 @@ function App() {
   }
 
   const run = () => {
-
     let expects = []
     for (let i = 1; i <= expectpointsNum; i++) {
       expects.push(getExpectCode(i).replace(/\r/mg,""))
     }
-
-    print(JSON.stringify(expects,"","  "))
 
     if (running === true) {
       print("服务器已经在运行您的程序,请等待...")
@@ -227,26 +224,25 @@ function App() {
     })
   }
 
-  const runSelectedCheckpoint = () => {
-    if (selectedCheckpoint === "") {
-      return
+  const check = () => {
+    let expects = []
+    for (let i = 1; i <= expectpointsNum; i++) {
+      expects.push(getExpectCode(i).replace(/\r/mg,""))
     }
-    if (!expectpointsInput[selectedCheckpoint]) {
-      print(`请补全输入[${selectedCheckpoint}]`)
-      return
-    }
+
     if (running === true) {
-      print("服务器已经在运行您的程序,请等待...")
+      print("服务器已经在检查您的输入,请等待...")
       return
     }
     setRunning(true)
-    print(`提交代码到服务器,开始检查输入[${selectedCheckpoint}]`)
-    fetch(`${httpprefix}/run/${encodeURI(problemName)}`, {
+    print("提交代码到服务器,开始检查")
+    fetch(`${httpprefix}/check/${encodeURI(problemName)}`, {
       method: "POST",
       mode: 'cors',
-      body: JSON.stringify({ [selectedCheckpoint]: expectpointsInput[selectedCheckpoint] })
+      body: JSON.stringify({
+        expects:expects,
+      })
     }).then(response => response.json()).then(json => {
-      console.log(json)
       print(json.output)
     }).catch(err => {
       print("访问服务器失败")
@@ -255,6 +251,8 @@ function App() {
       printbr()
     })
   }
+
+
 
   return (
     <div>
@@ -265,9 +263,8 @@ function App() {
             {title}
           </Typography>
           <Button color="inherit" onClick={e => setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
-          <Button color="inherit" onClick={() => {
-            run()
-          }}>运行</Button>
+          <Button color="inherit" onClick={run}>运行</Button>
+          <Button color="inherit" onClick={check}>检查输入</Button>
         </Toolbar>
 
         <Menu
@@ -278,8 +275,7 @@ function App() {
           onClose={() => setProblemAnchorEl(null)}
           PaperProps={{
             style: {
-              maxHeight: "20em",
-              width: '50em',
+              maxHeight: "30em"
             },
           }}
         >

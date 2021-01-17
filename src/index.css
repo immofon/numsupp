@@ -17,7 +17,7 @@ code {
     monospace;
 }
 
-td,th {
+table {
   min-width: 80%;
   border: 1px solid gray;
   margin: 0 auto;
