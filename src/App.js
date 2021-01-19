@@ -1,4 +1,4 @@
-import { Button, IconButton, Paper, Toolbar, Typography, AppBar, Menu, MenuItem, Grid } from '@material-ui/core';
+import { Button, Dialog,DialogTitle,DialogContent, DialogActions,TextField, Toolbar, Typography, AppBar, Menu, MenuItem, Grid } from '@material-ui/core';
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown'
 import Tex from '@matejmazur/react-katex'
@@ -20,6 +20,9 @@ function App() {
   const [markdown, setMarkdown] = useState("")
   const [splitedCode, setSplitedCode] = useState([])
 
+  const [username, setUsername] = useState((window.localStorage && window.localStorage.getItem("numsupp_username")) || "")
+  const [openLoginDialog, setOpenLoginDialog] = useState(false)
+  
   const [expectpointsNum, setExpectpointsNum] = useState(0)
 
   const [title, setTitle] = useState("正在加载题目列表")
@@ -88,7 +91,7 @@ function App() {
       value: "",
       language: "c",
       automaticLayout: true,
-      minimap: { enabled: false } ,
+      minimap: { enabled: false },
     });
 
     setEditor(ed)
@@ -192,14 +195,14 @@ function App() {
   }
 
   const getExpectCode = id => { // id: 1,2,...
-    const splited = editor.getValue().replace(/\r/mg,"").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/\n/mg)
+    const splited = editor.getValue().replace(/\r/mg, "").split(/^\/\/>{30}\[[0-9]+\]<{30}\/\/\n/mg)
     return splited[id * 2 - 1]
   }
 
   const run = () => {
     let expects = []
     for (let i = 1; i <= expectpointsNum; i++) {
-      expects.push(getExpectCode(i).replace(/\r/mg,""))
+      expects.push(getExpectCode(i).replace(/\r/mg, ""))
     }
 
     if (running === true) {
@@ -212,7 +215,8 @@ function App() {
       method: "POST",
       mode: 'cors',
       body: JSON.stringify({
-        expects:expects,
+        expects: expects,
+        username:username,
       })
     }).then(response => response.json()).then(json => {
       print(json.output)
@@ -227,7 +231,7 @@ function App() {
   const check = () => {
     let expects = []
     for (let i = 1; i <= expectpointsNum; i++) {
-      expects.push(getExpectCode(i).replace(/\r/mg,""))
+      expects.push(getExpectCode(i).replace(/\r/mg, ""))
     }
 
     if (running === true) {
@@ -240,7 +244,8 @@ function App() {
       method: "POST",
       mode: 'cors',
       body: JSON.stringify({
-        expects:expects,
+        expects: expects,
+        username:username,
       })
     }).then(response => response.json()).then(json => {
       print(json.output)
@@ -262,6 +267,7 @@ function App() {
           <Typography noWrap style={{ flexGrow: 1 }}>
             {title}
           </Typography>
+          <Button color="inherit" onClick={()=>setOpenLoginDialog(true)}>{username === "" ? "登陆" : `您好,${username}`}</Button>
           <Button color="inherit" onClick={e => setProblemAnchorEl(e.currentTarget)}>选择题目</Button>
           <Button color="inherit" onClick={run}>运行</Button>
           <Button color="inherit" onClick={check}>检查输入</Button>
@@ -285,6 +291,27 @@ function App() {
             </MenuItem>
           ))}
         </Menu>
+
+        <Dialog open={openLoginDialog} onClose={() => setOpenLoginDialog(false)} aria-labelledby="form-dialog-title">
+          <DialogTitle id="form-dialog-title">请输入您的姓名</DialogTitle>
+          <DialogContent>
+            <TextField
+              value={username}
+              onChange={e => { setUsername(e.target.value); window.localStorage.setItem("numsupp_username", e.target.value) }}
+              autoFocus
+              margin="dense"
+              id="name"
+              label="姓名"
+              type="text"
+              fullWidth
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setOpenLoginDialog(false)} color="primary">
+              确定
+          </Button>
+          </DialogActions>
+        </Dialog>
       </AppBar>
 
 
@@ -297,7 +324,7 @@ function App() {
         <Grid item xs={6}>
           <div style={{ overflowY: "auto", height: height * 0.7, margin: "0" }}>
             <div style={{ margin: "0.5rem" }}>
-              <ReactMarkdown plugins={[math,gfm]}
+              <ReactMarkdown plugins={[math, gfm]}
                 renderers={{
                   inlineMath: ({ value }) => <Tex math={value} />,
                   math: ({ value }) => <Tex block math={value} />

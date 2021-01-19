@@ -17,8 +17,14 @@ code {
     monospace;
 }
 
+
+table, td, th{
+  border:1px solid black;
+}
+
 table {
-  min-width: 80%;
-  border: 1px solid gray;
+  min-width: 75%;
+  max-width: 90%;
   margin: 0 auto;
+  border-collapse:collapse;
 }
